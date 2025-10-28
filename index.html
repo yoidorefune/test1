@@ -1,10 +1,119 @@
-<!DOCTYPE html>
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>転送テスト</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,'Hiragino Kaku Gothic ProN',sans-serif;margin:24px}
+    .card{border:1px solid #ddd;padding:16px;border-radius:8px;margin-bottom:12px}
+    label{display:block;margin-bottom:8px;font-weight:600}
+    input[type=text]{width:100%}
+    button{margin-top:8px}
+    pre{background:#f7f7f7;padding:12px;border-radius:6px}
+  </style>
+</head>
+<body>
+  <h1>転送テストページ</h1>
+  <p>このページはローカルで開いて、ダウンロード/アップロードの簡易テストを行うためのサンプルです。</p>
 
-test
+  <div class="card">
+    <label>ダウンロード（生成データ）テスト</label>
+    <div>
+      <label>生成サイズ（MB）: <input id="dlSize" type="number" value="10" min="1" style="width:80px"></label>
+      <button id="startDl">生成してダウンロード</button>
+      <div id="dlResult" style="margin-top:8px"></div>
+    </div>
+    <small>※ 大きなサイズを指定するとブラウザやマシンによっては遅くなることがあります。</small>
+  </div>
 
-<br>
-<h1>test2</h1>
+  <div class="card">
+    <label>アップロードテスト</label>
+    <div>
+      <input id="fileInput" type="file">
+      <label>アップロード先URL（例: http://localhost:3000/upload）</label>
+      <input id="uploadUrl" type="text" placeholder="https://example.com/upload">
+      <br>
+      <button id="startUpload">アップロード開始</button>
+      <div id="uploadResult" style="margin-top:8px"></div>
+    </div>
+    <small>サーバー側で受け取るエンドポイントが必要です。指定しない場合はPOSTは行われません。</small>
+  </div>
 
+  <div class="card">
+    <label>簡易転送ログ</label>
+    <pre id="log" aria-live="polite">操作ログがここに表示されます。
+</pre>
+  </div>
 
+<script>
+function log(msg){
+  const el = document.getElementById('log');
+  const t = new Date().toLocaleTimeString();
+  el.textContent = `${t} - ${msg}\n` + el.textContent;
+}
 
+document.getElementById('startDl').addEventListener('click', async () => {
+  const mb = Math.max(1, parseInt(document.getElementById('dlSize').value || '10', 10));
+  const resultEl = document.getElementById('dlResult');
+  resultEl.textContent = '準備中...';
+  log(`ダウンロード生成開始: ${mb} MB`);
+
+  // 生成とダウンロード
+  try{
+    const size = mb * 1024 * 1024;
+    const start = performance.now();
+    // 大きな配列は0で埋めるだけにする（乱数は不要で時間がかかる）
+    const arr = new Uint8Array(size);
+    const blob = new Blob([arr], {type: 'application/octet-stream'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `test-${mb}MB.bin`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    const end = performance.now();
+    const elapsed = (end - start) / 1000;
+    const speed = (mb / elapsed).toFixed(2);
+    resultEl.textContent = `生成とダウンロードを開始しました。生成時間: ${elapsed.toFixed(3)} s, 推定速度: ${speed} MB/s (生成ベース)`;
+    log(`生成完了 (${mb}MB) 生成時間=${elapsed.toFixed(3)}s 推定速度=${speed}MB/s`);
+  }catch(e){
+    resultEl.textContent = 'エラー: ' + e.message;
+    log('ダウンロード生成中にエラー: ' + e.message);
+  }
+});
+
+// アップロード
+document.getElementById('startUpload').addEventListener('click', async () => {
+  const fileInput = document.getElementById('fileInput');
+  const url = document.getElementById('uploadUrl').value.trim();
+  const resultEl = document.getElementById('uploadResult');
+  if(!fileInput.files.length){ resultEl.textContent = 'ファイルを選択してください。'; return; }
+  if(!url){ resultEl.textContent = 'アップロード先URLを入力してください。'; return; }
+
+  const file = fileInput.files[0];
+  resultEl.textContent = 'アップロード中...';
+  log(`アップロード開始: ${file.name} -> ${url}`);
+
+  try{
+    const fd = new FormData();
+    fd.append('file', file, file.name);
+    const start = performance.now();
+    const res = await fetch(url, { method: 'POST', body: fd });
+    const end = performance.now();
+    const elapsed = (end - start) / 1000;
+    let text = '';
+    try{ text = await res.text(); }catch(e){ text = 'レスポンス取得エラー'; }
+    resultEl.textContent = `ステータス: ${res.status} (${res.statusText}), 時間: ${elapsed.toFixed(3)} s`;
+    log(`アップロード完了: status=${res.status} time=${elapsed.toFixed(3)}s`);
+  }catch(e){
+    resultEl.textContent = 'アップロードエラー: ' + e.message;
+    log('アップロードエラー: ' + e.message);
+  }
+});
+
+</script>
+</body>
 </html>
